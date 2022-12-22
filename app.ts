@@ -119,7 +119,7 @@ async function saveImages() {
 }
 
 function mkdir(name: String) {
-  const path = "/" + name;
+  const path = "./" + name;
   if (!fs.existsSync(path)) {
     fs.mkdirSync(path);
   }
