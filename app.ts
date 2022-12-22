@@ -1,6 +1,7 @@
 import puppeteer from "puppeteer";
 import * as cheerio from "cheerio";
 import * as fs from "fs";
+import axios from "axios";
 
 const pageSize: 40|80|120 = 40;
 const numOfPages = 1;
@@ -19,7 +20,8 @@ interface Product {
   longImages: string[];
 }
 
-(async () => {
+async function getProductsToJSON() {
+  mkdir("data");
   const products: Product[] = [];
 
   const browser = await puppeteer.launch({ headless: true });
@@ -53,26 +55,6 @@ interface Product {
       const p_desc = $("div.product-img-wrap div.product-img-info > ul > ul > li").map((_, el) => $(el).text().trim()).toArray();
       const p_longImgs = $("div.product-img-wrap div.product-img-info > ul > div > img").map((_, el) => $(el).attr("src")).toArray();
 
-      // console.log("name : " + p_name);
-      // console.log("price : " + p_price);
-      // console.log("code : " + p_code);
-      // console.log("size : " + p_sizes);
-
-      // console.log("imgs :");
-      // for (let img of p_imgs) {
-      //   console.log("\t" + img);
-      // }
-
-      // console.log("des :");
-      // for (let des of p_desc) {
-      //   console.log("\t" + des);
-      // }
-
-      // console.log("long imgs :");
-      // for (let longImg of p_longImgs) {
-      //   console.log("\t" + longImg);
-      // }
-
       products.push({
         id: p_code,
         name: p_name,
@@ -90,4 +72,58 @@ interface Product {
   console.log(products.length + " files saved");
 
   browser.close();
- })();
+}
+
+async function saveImages() {
+  mkdir("images");
+  const data = fs.readFileSync("./data/products.json", "utf-8");
+  const products: Product[] = JSON.parse(data);
+
+  const total = products.map(p => p.images.length + p.longImages.length).reduce((prev, curr) => prev + curr);
+  let count = 0;
+
+  let writer: fs.WriteStream|null = null;
+
+  for (let p of products) {
+    let idx = 1;
+    for (let img of p.images) {
+      let ext = "";
+      if (img.includes(".jpg")) ext = ".jpg";
+      else ext = ".png";
+
+      writer = fs.createWriteStream(`./images/${p.id}_${idx}${ext}`);
+      const response = await axios({ url: img, method: 'GET', responseType: 'stream' })
+      await response.data.pipe(writer);
+
+      idx++;
+      count++;
+      console.log("progress " + count + " / " + total);
+    }
+
+    idx = 1;
+    for (let img of p.longImages) {
+      let ext = "";
+      if (img.includes(".jpg")) ext = ".jpg";
+      else ext = ".png";
+
+      writer = fs.createWriteStream(`./images/${p.id}_long_${idx}${ext}`);
+      const response = await axios({ url: img, method: 'GET', responseType: 'stream' })
+      await response.data.pipe(writer);
+
+      idx++;
+      count++;
+      console.log("progress " + count + " / " + total);
+    }
+  }
+  console.log("complete");
+}
+
+function mkdir(name: String) {
+  const path = "/" + name;
+  if (!fs.existsSync(path)) {
+    fs.mkdirSync(path);
+  }
+}
+
+// getProductsToJSON();
+// saveImages();
