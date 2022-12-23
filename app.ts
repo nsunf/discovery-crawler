@@ -28,14 +28,14 @@ async function getProductsToJSON() {
   const page = await browser.newPage();
   let $: cheerio.CheerioAPI;
 
-  for (let p = 1; p <= numOfPages; p++) {
-    await page.goto(new_men_url + `&pageSize=${pageSize}&pageNo=${p}`);
+  for (let p = 0; p < numOfPages; p++) {
+    await page.goto(new_men_url + `&pageSize=${pageSize}&pageNo=${p + 1}`);
 
     $ = cheerio.load(await page.content());
 
     const pathList: string[] = [];
 
-    $("#contents > div.contents-type01-box02 > div.item-list02 > ul > li > a").each((idx, el) => {
+    $("#contents > div.contents-type01-box02 > div.item-list02 > ul > li > a").each((_, el) => {
       const onclickStr = $(el).attr("onclick") ?? "";
       let startIdx = "gaTagging('".length;
       let endIdx = onclickStr.indexOf("','");
@@ -64,7 +64,7 @@ async function getProductsToJSON() {
         descriptions: p_desc, 
         longImages: p_longImgs
       })
-      console.log(`progress : (${i + 1} / ${numOfPages * pageSize})`);
+      console.log(`progress : (${(p * pageSize) + (i + 1)} / ${numOfPages * pageSize})`);
     }
   }
 
@@ -74,45 +74,32 @@ async function getProductsToJSON() {
   browser.close();
 }
 
-async function saveImages() {
+async function extracImagesFromJSON() {
+  deleteImagesDir();
   mkdir("images");
-  const data = fs.readFileSync("./data/products.json", "utf-8");
-  const products: Product[] = JSON.parse(data);
+  const jsonData = fs.readFileSync("./data/products.json", "utf-8");
+  const products: Product[] = JSON.parse(jsonData);
 
   const total = products.map(p => p.images.length + p.longImages.length).reduce((prev, curr) => prev + curr);
   let count = 0;
 
-  let writer: fs.WriteStream|null = null;
-
   for (let p of products) {
     let idx = 1;
     for (let img of p.images) {
-      let ext = "";
-      if (img.includes(".jpg")) ext = ".jpg";
-      else ext = ".png";
-
-      writer = fs.createWriteStream(`./images/${p.id}_${idx}${ext}`);
-      const response = await axios({ url: img, method: 'GET', responseType: 'stream' })
-      await response.data.pipe(writer);
+      await saveImage(img, `${p.id}_${idx}`);
 
       idx++;
       count++;
-      console.log("progress " + count + " / " + total);
+      console.log(`progress : (${count} / ${total})`);
     }
 
     idx = 1;
     for (let img of p.longImages) {
-      let ext = "";
-      if (img.includes(".jpg")) ext = ".jpg";
-      else ext = ".png";
-
-      writer = fs.createWriteStream(`./images/${p.id}_long_${idx}${ext}`);
-      const response = await axios({ url: img, method: 'GET', responseType: 'stream' })
-      await response.data.pipe(writer);
+      await saveImage(img, `${p.id}_long_${idx}`);
 
       idx++;
       count++;
-      console.log("progress " + count + " / " + total);
+      console.log(`progress : (${count} / ${total})`);
     }
   }
   console.log("complete");
@@ -120,10 +107,24 @@ async function saveImages() {
 
 function mkdir(name: String) {
   const path = "./" + name;
-  if (!fs.existsSync(path)) {
+  if (!fs.existsSync(path))
     fs.mkdirSync(path);
-  }
+}
+
+function deleteImagesDir() {
+  if (fs.existsSync("./images"))
+    fs.rmSync("./images", { recursive: true });
+}
+
+async function saveImage(imgUrl: string, filename: string) {
+  let ext = "";
+  if (imgUrl.includes(".jpg")) ext = ".jpg";
+  else ext = ".png";
+
+  const writer = fs.createWriteStream(`./images/${filename}${ext}`);
+  const response = await axios({ url: imgUrl, method: 'GET', responseType: 'stream' })
+  await response.data.pipe(writer);
 }
 
 // getProductsToJSON();
-// saveImages();
+// extracImagesFromJSON();
